@@ -1,0 +1,176 @@
+--table created to import .csv file in PGADMIN
+
+CREATE TABLE nashville_housing (
+	UniqueID bigint PRIMARY KEY UNIQUE,
+	ParcelID VARCHAR(250) NOT NULL,
+	LandUse VARCHAR(250),
+	PropertyAddress VARCHAR(500),
+	SaleDate VARCHAR(500),
+	SalePrice VARCHAR(500),
+	LegalReference VARCHAR(500),
+	SoldAsVacant boolean,
+	OwnerName VARCHAR(500),
+	OwnerAddress VARCHAR(500),
+	Acreage Numeric,
+	TaxDistrict VARCHAR(500),
+	LandValue bigint,
+	BuildingValue BIGINT,
+	TotalValue bigint,
+	YearBuilt int,
+	Bedrooms int,
+	FullBath int,
+	HalfBath int
+);
+
+--check if data imported correctly
+
+SELECT *
+FROM nashville_housing;
+
+/*
+Start data cleaning
+*/
+-
+--Standardize Date Format
+
+SELECT SaleDate, to_date(SaleDate, 'Month DD YYYY')
+FROM nashville_housing;
+
+UPDATE nashville_housing
+SET SaleDate =  to_date(SaleDate, 'Month DD YYYY');
+
+SELECT SaleDate
+FROM nashville_housing;
+
+---------------------------------------------------------------------------------------------
+---Populate PropertyAddress
+
+SELECT *
+FROM nashville_housing
+--WHERE PropertyAddress IS NULL
+ORDER BY ParcelID
+
+SELECT a.ParcelID, a.PropertyAddress, b.Parcelid, b.PropertyAddress
+		COALESCE(a.PropertyAddress, b.PropertyAddress)
+FROM nashville_housing a
+JOIN nashville_housing b
+	ON a.ParcelID = b.ParcelID
+	AND a.Uniqueid <> b.Uniqueid
+WHERE a.PropertyAddress IS NULL
+
+
+UPDATE nashville_housing a
+SET PropertyAddress = COALESCE(a.PropertyAddress, b.PropertyAddress)
+FROM nashville_housing b
+WHERE a.Parcelid = b.Parcelid
+	AND a.Uniqueid <> b.Uniqueid
+	AND a.PropertyAddress IS NULL;
+	
+---------------------------------------------------------------------------------------------	
+--Breaking out Address into Individual Columns (Address, City, State)
+
+SELECT PropertyAddress
+FROM nashville_housing;
+
+SELECT 
+	SUBSTRING(PropertyAddress, 1, POSITION(',' IN PropertyAddress)-1) as Address
+	, SUBSTRING(PropertyAddress, POSITION(', ' IN PropertyAddress)+2, Length(propertyaddress)) as Address
+FROM nashville_housing
+
+ALTER TABLE nashville_housing
+ADD PropertySplitAddress VARCHAR(255);
+
+UPDATE nashville_housing 
+SET PropertySplitAddress = SUBSTRING(PropertyAddress, 1, POSITION(',' IN PropertyAddress)-1)
+
+ALTER TABLE nashville_housing
+ADD PropertySplitCity VARCHAR(255);
+
+UPDATE nashville_housing 
+SET PropertySplitCity = SUBSTRING(PropertyAddress, POSITION(', ' IN PropertyAddress)+2, Length(propertyaddress))
+
+
+SELECT OwnerAddress
+FROM nashville_housing;
+
+SELECT 
+	SPLIT_PART(OwnerAddress,',',1),
+	SPLIT_PART(OwnerAddress,', ',2),
+	SPLIT_PART(OwnerAddress,', ',3)
+FROM nashville_housing
+
+ALTER TABLE nashville_housing
+ADD OwnerSplitAddress VARCHAR(255);
+
+UPDATE nashville_housing 
+SET OwnerSplitAddress =SPLIT_PART(OwnerAddress,',',1)
+
+ALTER TABLE nashville_housing
+ADD OwnerSplitCity VARCHAR(255);
+
+UPDATE nashville_housing 
+SET OwnerSplitCity = SPLIT_PART(OwnerAddress,', ',2)
+
+ALTER TABLE nashville_housing
+ADD OwnerSplitState VARCHAR(255);
+
+UPDATE nashville_housing 
+SET OwnerSplitState = SPLIT_PART(OwnerAddress,', ',3);
+
+---------------------------------------------------------------------------------------------
+
+--Change Y AND N to Yes and No in "SoldAsVacant" field
+
+SELECT DISTINCT(SoldAsVacant),COUNT(SoldAsVacant)
+FROM nashville_housing
+GROUP BY SoldAsVacant
+ORDER BY 2
+
+SELECT SoldAsVacant, 
+	CASE WHEN SoldAsVacant = 'Y' THEN 'Yes'
+		WHEN SoldAsVacant = 'N' THEN 'No'
+		ELSE SoldAsVacant
+		END
+FROM nashville_housing
+
+UPDATE nashville_housing
+SET SoldAsVacant = CASE WHEN SoldAsVacant = 'Y' THEN 'Yes'
+		WHEN SoldAsVacant = 'N' THEN 'No'
+		ELSE SoldAsVacant
+		END;
+		
+---------------------------------------------------------------------------------------------
+		
+---Resolve Duplicates
+WITH RowNumCTE AS (
+SELECT *,
+	ROW_NUMBER() OVER(
+	PARTITION BY 
+		ParcelID,
+		PropertyAddress,
+		SalePrice,
+		SaleDate,
+		LegalReference
+		ORDER BY 
+			UniqueID
+	) row_num
+FROM nashville_housing
+--ORDER BY ParcelID
+	)
+
+DELETE
+FROM nashville_housing
+WHERE ParcelID IN (SELECT ParcelID FROM RowNumCTE WHERE row_num>1)
+
+---------------------------------------------------------------------------------------------
+-- DELETE Unused Column
+
+SELECT *
+FROM nashville_housing
+
+ALTER TABLE nashville_housing
+DROP COLUMN OwnerAddress, 
+DROP COLUMN TaxDistrict, 
+DROP COLUMN PropertyAddress,
+DROP COLUMN SaleDate
+
