@@ -1,6 +1,6 @@
 # DataPortfolio
 
-Developing Data Analyst Portfolio with POSTGRESQL and Tableau
+Developing Data Analyst Portfolio with PostGreSQL and Tableau
 
 CovidDataProject: 
   --- Data Exploration Project for COVID-19 data
